@@ -1,14 +1,16 @@
 import { Callout, casesI18n } from '@app-builder/components';
 import { setToastMessage } from '@app-builder/components/MarbleToaster';
+import { isAdmin } from '@app-builder/models';
+import { type loader } from '@app-builder/routes/_builder+/cases+/$caseId+/_index';
 import { initServerServices } from '@app-builder/services/init.server';
 import { handleSubmit } from '@app-builder/utils/form';
 import { getRoute } from '@app-builder/utils/routes';
 import { fromUUIDtoSUUID } from '@app-builder/utils/short-uuid';
 import { type ActionFunctionArgs, redirect } from '@remix-run/node';
-import { useFetcher } from '@remix-run/react';
+import { Link, useFetcher, useLoaderData } from '@remix-run/react';
 import { useForm } from '@tanstack/react-form';
-import { useTranslation } from 'react-i18next';
-import { Button, Modal } from 'ui-design-system';
+import { Trans, useTranslation } from 'react-i18next';
+import { Button, Modal, Tooltip } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 import { z } from 'zod';
 
@@ -71,6 +73,14 @@ export const EscalateCase = ({ id, inboxId }: { id: string; inboxId: string }) =
   const { t } = useTranslation(casesI18n);
   const fetcher = useFetcher<typeof action>();
 
+  const { inboxes, currentUser } = useLoaderData<typeof loader>();
+
+  const inboxDetail = inboxes.find((inbox) => inbox.id === inboxId)!;
+  const targetInbox = inboxes.find((inbox) => inbox.id === inboxDetail.escalationInboxId);
+  const canEscalate = inboxDetail.escalationInboxId !== undefined;
+
+  const isAdminUser = isAdmin(currentUser);
+
   const form = useForm({
     onSubmit: async ({ value }) => {
       fetcher.submit(value, {
@@ -89,18 +99,41 @@ export const EscalateCase = ({ id, inboxId }: { id: string; inboxId: string }) =
 
   return (
     <Modal.Root>
-      <Modal.Trigger asChild>
-        <Button variant="secondary" size="medium" type="button">
-          <Icon icon="arrow-up" className="size-5" aria-hidden />
-          Escalate
-        </Button>
-      </Modal.Trigger>
+      <Tooltip.Default
+        content={
+          <div className="pb-2">
+            <div>
+              {canEscalate
+                ? t('cases:escalate-button.hint', { inboxName: targetInbox?.name })
+                : isAdminUser
+                  ? t('cases:escalate-button.forbidden.hint.admin')
+                  : t('cases:escalate-button.forbidden.hint')}
+            </div>
+            {!canEscalate && isAdminUser ? (
+              <Link
+                to={getRoute('/settings/inboxes/:inboxId', {
+                  inboxId: fromUUIDtoSUUID(inboxId),
+                })}
+                className="hover:text-purple-60 focus:text-purple-60 text-purple-65 font-semibold hover:underline focus:underline"
+              >
+                {t('cases:case.inbox_settings_link')}
+              </Link>
+            ) : null}
+          </div>
+        }
+      >
+        <Modal.Trigger asChild>
+          <Button variant="secondary" size="medium" type="button" disabled={!canEscalate}>
+            <Icon icon="arrow-up" className="size-5" aria-hidden />
+            {t('cases:escalate-button.label')}
+          </Button>
+        </Modal.Trigger>
+      </Tooltip.Default>
       <Modal.Content>
         <Modal.Title>Escalate Case</Modal.Title>
         <div className="flex flex-col gap-8 p-8">
-          <Callout>
-            By escalating this decision, you will no longer have access to the case and will no
-            longer be assigned to the case. You will be redirected to your inbox.
+          <Callout className="text-balance">
+            <Trans i18nKey="cases:escalate-case.modal.callout" />
           </Callout>
           <form onSubmit={handleSubmit(form)} className="flex w-full flex-row gap-2">
             <Modal.Close asChild>
@@ -110,7 +143,7 @@ export const EscalateCase = ({ id, inboxId }: { id: string; inboxId: string }) =
             </Modal.Close>
 
             <Button type="submit" className="flex-1 first-letter:capitalize">
-              Escalate
+              {t('cases:escalate-case.modal.submit-button.label')}
             </Button>
           </form>
         </div>

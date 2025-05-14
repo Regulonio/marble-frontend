@@ -5,27 +5,33 @@ import { getServerEnv } from '@app-builder/utils/environment';
 import { getCaseFileUploadEndpointById } from '@app-builder/utils/files';
 import { handleSubmit } from '@app-builder/utils/form';
 import { getRoute } from '@app-builder/utils/routes';
-import { type ActionFunctionArgs } from '@remix-run/node';
+import {
+  type ActionFunctionArgs,
+  unstable_createMemoryUploadHandler,
+  unstable_parseMultipartFormData,
+} from '@remix-run/node';
 import { redirect, useFetcher } from '@remix-run/react';
 import { useForm } from '@tanstack/react-form';
 import { decode } from 'decode-formdata';
 import { serialize } from 'object-to-formdata';
-import { toggle } from 'radash';
+import { toggle, tryit } from 'radash';
 import { useEffect } from 'react';
 import { useDropzone } from 'react-dropzone-esm';
 import { useTranslation } from 'react-i18next';
-import { Button, cn } from 'ui-design-system';
+import { Button } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 import { z } from 'zod';
 
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-const schema = z.object({
-  caseId: z.string().nonempty(),
-  comment: z.string().nonempty(),
-  files: z.array(z.instanceof(File)),
-});
+const schema = z
+  .object({
+    caseId: z.string().uuid().nonempty(),
+    comment: z.string(),
+    files: z.array(z.instanceof(File)),
+  })
+  .refine((data) => data.comment.trim() !== '' || data.files.length > 0);
 
 type CaseCommentForm = z.infer<typeof schema>;
 
@@ -37,15 +43,33 @@ export async function action({ request }: ActionFunctionArgs) {
     authSessionService: { getSession: getAuthSession },
   } = initServerServices(request);
 
-  const [t, session, authSession, raw, { cases }] = await Promise.all([
+  const [err, raw] = await tryit(unstable_parseMultipartFormData)(
+    request,
+    unstable_createMemoryUploadHandler({
+      maxPartSize: MAX_FILE_SIZE,
+    }),
+  );
+
+  const [t, session, authSession, { cases }] = await Promise.all([
     getFixedT(request, ['common']),
     getSession(request),
     getAuthSession(request),
-    request.formData(),
     authService.isAuthenticated(request, {
       failureRedirect: getRoute('/sign-in'),
     }),
   ]);
+
+  if (err) {
+    setToastMessage(session, {
+      type: 'error',
+      message: t('common:max_size_exceeded', { size: MAX_FILE_SIZE_MB }),
+    });
+
+    return Response.json(
+      { success: false, errors: [] },
+      { headers: { 'Set-Cookie': await commitSession(session) } },
+    );
+  }
 
   const token = authSession.get('authToken')?.access_token;
 
@@ -115,18 +139,25 @@ export function AddComment({ caseId }: { caseId: string }) {
       });
     },
     validators: {
-      onBlur: schema,
+      onChange: schema,
+      onMount: schema,
       onSubmit: schema,
     },
   });
 
   useEffect(() => {
-    if (lastData?.success) form.reset();
+    if (lastData?.success) {
+      form.reset();
+      form.validate('mount');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastData]);
 
   const { getInputProps, getRootProps } = useDropzone({
-    onDrop: (acceptedFiles) => form.setFieldValue('files', (prev) => [...prev, ...acceptedFiles]),
+    onDrop: (acceptedFiles) => {
+      form.setFieldValue('files', (prev) => [...prev, ...acceptedFiles]);
+      form.validate('change');
+    },
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.gif'],
       'application/pdf': ['.pdf'],
@@ -154,10 +185,7 @@ export function AddComment({ caseId }: { caseId: string }) {
               onBlur={field.handleBlur}
               name={field.name}
               placeholder={t('cases:case_detail.add_a_comment.placeholder')}
-              className={cn(
-                'form-textarea text-s w-full resize-none border-none bg-transparent outline-none',
-                { 'placeholder:text-red-47': field.state.meta.errors.length !== 0 },
-              )}
+              className="form-textarea text-s w-full resize-none border-none bg-transparent outline-none"
             />
           )}
         </form.Field>
@@ -181,6 +209,7 @@ export function AddComment({ caseId }: { caseId: string }) {
                       onClick={(e) => {
                         e.preventDefault();
                         field.handleChange((prev) => toggle(prev, file));
+                        form.validate('change');
                       }}
                     />
                   </div>
@@ -190,14 +219,23 @@ export function AddComment({ caseId }: { caseId: string }) {
           )}
         </form.Field>
       </div>
-      <Button
-        type="submit"
-        variant="primary"
-        size="medium"
-        aria-label={t('cases:case_detail.add_a_comment.post')}
-      >
-        <Icon icon="send" className="size-5" />
-      </Button>
+      <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitSuccessful]}>
+        {([canSubmit, isSubmitSuccessful]) => (
+          <Button
+            type="submit"
+            variant="primary"
+            size="medium"
+            aria-label={t('cases:case_detail.add_a_comment.post')}
+            disabled={!canSubmit || isSubmitSuccessful}
+          >
+            {isSubmitSuccessful ? (
+              <Icon icon="spinner" className="size-5 animate-spin" />
+            ) : (
+              <Icon icon="send" className="size-5" />
+            )}
+          </Button>
+        )}
+      </form.Subscribe>
     </form>
   );
 }

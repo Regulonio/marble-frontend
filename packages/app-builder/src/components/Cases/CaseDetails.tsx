@@ -6,21 +6,24 @@ import { CloseCase } from '@app-builder/routes/ressources+/cases+/close-case';
 import { EditCaseAssignee } from '@app-builder/routes/ressources+/cases+/edit-assignee';
 import { EditCaseInbox } from '@app-builder/routes/ressources+/cases+/edit-inbox';
 import { EditCaseName } from '@app-builder/routes/ressources+/cases+/edit-name';
-import { EditCaseSuspicion } from '@app-builder/routes/ressources+/cases+/edit-suspicion';
 import { EditCaseTags } from '@app-builder/routes/ressources+/cases+/edit-tags';
 import { EscalateCase } from '@app-builder/routes/ressources+/cases+/escalate-case';
 import { OpenCase } from '@app-builder/routes/ressources+/cases+/open-case';
 import { SnoozeCase } from '@app-builder/routes/ressources+/cases+/snooze-case';
+import { UploadFile } from '@app-builder/routes/ressources+/files+/upload-file';
+import { getCaseFileUploadEndpoint } from '@app-builder/utils/files';
 import { formatDateTime, useFormatLanguage } from '@app-builder/utils/format';
 import { useLoaderData } from '@remix-run/react';
 import { type RefObject, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ClientOnly } from 'remix-utils/client-only';
 import { match } from 'ts-pattern';
 import { Button, cn } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 
 import { CaseAlerts } from './CaseAlerts';
 import { CaseEvents } from './CaseEvents';
+import { CaseFile } from './CaseFile';
 import { casesI18n } from './cases-i18n';
 import { caseStatusMapping } from './CaseStatus';
 
@@ -28,12 +31,16 @@ export const CaseDetails = ({
   containerRef,
   currentUser,
   selectDecision,
+  drawerContentMode,
+  setDrawerContentMode,
 }: {
   containerRef: RefObject<HTMLDivElement>;
   currentUser: CurrentUser;
   selectDecision: (id: string) => void;
+  drawerContentMode: 'pivot' | 'decision' | 'snooze';
+  setDrawerContentMode: (mode: 'pivot' | 'decision' | 'snooze') => void;
 }) => {
-  const { case: detail, inboxes, reports } = useLoaderData<typeof loader>();
+  const { case: detail, inboxes } = useLoaderData<typeof loader>();
   const { t } = useTranslation(casesI18n);
   const language = useFormatLanguage();
   const infoRef = useRef<HTMLDivElement>(null);
@@ -70,7 +77,7 @@ export const CaseDetails = ({
               .with('pending', () => <div className="border-red-47 size-4 rounded-full border-2" />)
               .with('closed', () => <div className="bg-green-38 size-4 rounded-full" />)
               .exhaustive()}
-            <span className="text-xs font-medium capitalize">
+            <span className="text-xs font-medium first-letter:capitalize">
               {t(caseStatusMapping[detail.status].tKey)}
             </span>
             {detail.outcome && detail.outcome !== 'unset' ? (
@@ -87,7 +94,7 @@ export const CaseDetails = ({
           </span>
         </div>
         <div className="grid grid-cols-[120px,1fr] items-center">
-          <span className="text-grey-50 text-xs font-normal">Creation date</span>
+          <span className="text-grey-50 text-xs font-normal">{t('cases:creation_date')}</span>
           <time className="text-xs font-medium" dateTime={detail.createdAt}>
             {formatDateTime(detail.createdAt, {
               language,
@@ -96,28 +103,31 @@ export const CaseDetails = ({
           </time>
         </div>
         <div className="grid grid-cols-[120px,1fr] items-center">
-          <span className="text-grey-50 text-xs font-normal">Inbox</span>
+          <span className="text-grey-50 text-xs font-normal">{t('cases:case.inbox')}</span>
           <EditCaseInbox id={detail.id} inboxId={detail.inboxId} inboxes={inboxes} />
         </div>
         <div className="grid grid-cols-[120px,1fr] items-center">
-          <span className="text-grey-50 text-xs font-normal">Tags</span>
+          <span className="text-grey-50 text-xs font-normal">{t('cases:case.tags')}</span>
           <EditCaseTags id={detail.id} tagIds={detail.tags.map(({ tagId }) => tagId)} />
         </div>
         <div className="grid grid-cols-[120px,1fr] items-center">
-          <span className="text-grey-50 text-xs font-normal">Assigned to</span>
+          <span className="text-grey-50 text-xs font-normal">{t('cases:assigned_to')}</span>
           <EditCaseAssignee
+            disabled={detail.status === 'closed'}
             assigneeId={detail.assignedTo}
             currentUser={currentUser}
             id={detail.id}
           />
         </div>
+        {/*
+        TODO: Add this section when SAR is properly spec back & front
         <div className="grid grid-cols-[120px,1fr] items-center">
           <span className="text-grey-50 text-xs font-normal">Report of suspicion</span>
           <EditCaseSuspicion id={detail.id} reports={reports} />
-        </div>
+        </div> */}
       </div>
       <div className="flex flex-col justify-start gap-1.5">
-        <span className="text-r text-grey-00 px-1 font-medium">Investigation</span>
+        <span className="text-r text-grey-00 px-1 font-medium">{t('cases:investigation')}</span>
         <div className="border-grey-90 bg-grey-100 flex flex-col rounded-lg border">
           <div className="p-4">
             <CaseEvents events={detail.events} inboxes={inboxes} />
@@ -127,13 +137,38 @@ export const CaseDetails = ({
       </div>
       <div className="flex flex-col justify-start gap-1.5">
         <div className="text-r text-grey-00 flex items-center justify-between px-1 font-medium">
-          <span>Alerts</span>
-          <Button variant="secondary" size="small">
+          <span>{t('cases:alerts')}</span>
+          <Button variant="secondary" size="small" onClick={() => setDrawerContentMode('snooze')}>
             <Icon icon="snooze" className="size-4" />
-            <span className="text-xs">Snooze rules</span>
+            <span className="text-xs">{t('cases:decisions.snooze_rules')}</span>
           </Button>
         </div>
-        <CaseAlerts selectDecision={selectDecision} />
+        <CaseAlerts
+          selectDecision={selectDecision}
+          setDrawerContentMode={setDrawerContentMode}
+          drawerContentMode={drawerContentMode}
+        />
+      </div>
+      <div className="flex flex-col justify-start gap-1.5">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-grey-00 text-r font-medium">{t('common:documents')}</span>
+          <UploadFile uploadFileEndpoint={getCaseFileUploadEndpoint(detail)}>
+            <Button variant="secondary" size="small">
+              <Icon icon="plus" className="size-3.5" />
+              {t('common:add')}
+            </Button>
+          </UploadFile>
+        </div>
+
+        <ClientOnly>
+          {() => (
+            <div className="border-grey-90 bg-grey-100 flex flex-wrap gap-2 rounded-lg border p-4">
+              {detail.files.map((file) => (
+                <CaseFile key={file.id} file={file} />
+              ))}
+            </div>
+          )}
+        </ClientOnly>
       </div>
     </main>
   );

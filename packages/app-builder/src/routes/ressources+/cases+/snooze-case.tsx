@@ -4,18 +4,24 @@ import { getRoute } from '@app-builder/utils/routes';
 import { type ActionFunctionArgs } from '@remix-run/node';
 import { useFetcher } from '@remix-run/react';
 import { useForm, useStore } from '@tanstack/react-form';
-import { addDays, addMonths, format, isMonday, isSameDay, isThisMonth, nextMonday } from 'date-fns';
-import { type Namespace } from 'i18next';
+import {
+  addDays,
+  addHours,
+  addMonths,
+  format,
+  isBefore,
+  isMonday,
+  isSameDay,
+  isThisMonth,
+  nextMonday,
+  startOfHour,
+} from 'date-fns';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { match } from 'ts-pattern';
 import { Button, Calendar, cn, MenuCommand } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 import { z } from 'zod';
-
-export const handle = {
-  i18n: [...casesI18n, 'common'] satisfies Namespace,
-};
 
 const editSnoozeSchema = z.object({
   caseId: z.string(),
@@ -79,7 +85,7 @@ export function SnoozeCase({
   caseId,
   snoozeUntil,
 }: Pick<EditSnoozeForm, 'caseId'> & { snoozeUntil?: string }) {
-  const { t } = useTranslation(handle.i18n);
+  const { t } = useTranslation(casesI18n);
   const fetcher = useFetcher<typeof action>();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -135,7 +141,7 @@ export function SnoozeCase({
                 className="size-5"
                 aria-hidden
               />
-              {t('cases:snooze.title')}
+              {field.state.value ? t('cases:unsnooze.title') : t('cases:snooze.title')}
             </Button>
           </MenuCommand.Trigger>
           <MenuCommand.Content className="mt-2 min-w-[264px]">
@@ -153,10 +159,10 @@ export function SnoozeCase({
                   <span className="text-r inline-flex items-center gap-1">
                     <span>
                       {match(duration)
-                        .with('tomorrow', () => 'Tomorrow')
-                        .with('oneWeek', () => 'Next week')
-                        .with('oneMonth', () => 'Next month')
-                        .with('nextMonday', () => 'Next Monday')
+                        .with('tomorrow', () => t('common:snooze.tomorrow'))
+                        .with('oneWeek', () => t('common:snooze.oneWeek'))
+                        .with('oneMonth', () => t('common:snooze.oneMonth'))
+                        .with('nextMonday', () => t('common:snooze.nextMonday'))
                         .exhaustive()}
                     </span>
                     <span className="text-2xs text-grey-50">{formatDate(date)}</span>
@@ -174,7 +180,7 @@ export function SnoozeCase({
                   }}
                 >
                   <span className="text-r inline-flex h-full items-center gap-1">
-                    <span>Custom</span>
+                    <span>{t('common:snooze.custom')}</span>
                     <span className="text-2xs text-grey-50">
                       {formatDate(new Date(field.state.value))}
                     </span>
@@ -188,7 +194,7 @@ export function SnoozeCase({
                   trigger={
                     <>
                       <span className="text-r inline-flex h-full items-center gap-1">
-                        <span>Custom</span>
+                        <span>{t('common:snooze.custom')}</span>
                         {field.state.value && isCustomDate ? (
                           <span className="text-2xs text-grey-50">
                             {formatDate(new Date(field.state.value))}
@@ -207,7 +213,11 @@ export function SnoozeCase({
                       selected={field.state.value ? new Date(field.state.value) : undefined}
                       onSelect={(date) => {
                         if (date) {
-                          field.handleChange(setTo9AM(date).toISOString());
+                          field.handleChange(
+                            isBefore(date, new Date())
+                              ? startOfHour(addHours(new Date(), 3)).toISOString()
+                              : setTo9AM(date).toISOString(),
+                          );
                           setIsOpen(false);
                           form.handleSubmit();
                         }

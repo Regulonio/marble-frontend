@@ -29,7 +29,7 @@ import { getSettings } from './settings+/_layout';
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { authService, versionRepository } = initServerServices(request);
-  const { user, organization, entitlements } = await authService.isAuthenticated(request, {
+  const { user, inbox, organization, entitlements } = await authService.isAuthenticated(request, {
     failureRedirect: getRoute('/sign-in'),
   });
 
@@ -37,13 +37,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     throw forbidden('Only Marble Core users can access this app.');
   }
 
-  const firstSettings = getSettings(user)[0];
-  const [organizationDetail, orgUsers, orgTags, versions] = await Promise.all([
+  const [organizationDetail, orgUsers, orgTags, versions, inboxes] = await Promise.all([
     organization.getCurrentOrganization(),
     organization.listUsers(),
     organization.listTags(),
     versionRepository.getBackendVersion(),
+    inbox.listInboxes(),
   ]);
+
+  const firstSettings = getSettings(user, inboxes)[0];
 
   return {
     user,

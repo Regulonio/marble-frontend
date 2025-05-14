@@ -22,7 +22,7 @@ const PublicEnvVarsSchema = z.object({
   NODE_ENV: z.string(),
   APP_VERSION: z.string().optional(),
 
-  SESSION_MAX_AGE: z.string(),
+  SESSION_MAX_AGE: z.string().optional(),
   MARBLE_API_URL_CLIENT: z.string(),
   MARBLE_API_URL_SERVER: z.string(),
   MARBLE_APP_URL: z.string(),
@@ -37,6 +37,10 @@ const PublicEnvVarsSchema = z.object({
   SENTRY_ENVIRONMENT: z.string().optional(),
 
   SEGMENT_WRITE_KEY: z.string().optional(),
+  DISABLE_SEGMENT: z
+    .string()
+    .transform((val) => val === 'true')
+    .optional(),
 });
 type PublicEnvVars = z.infer<typeof PublicEnvVarsSchema>;
 
@@ -78,7 +82,7 @@ interface ServerEnvVars {
   ENV: string;
   NODE_ENV: string;
   APP_VERSION?: string;
-  SESSION_MAX_AGE: string;
+  SESSION_MAX_AGE?: string;
   MARBLE_API_URL_CLIENT: string;
   MARBLE_API_URL_SERVER: string;
   MARBLE_APP_URL: string;
@@ -86,6 +90,7 @@ interface ServerEnvVars {
   SENTRY_DSN?: string;
   SENTRY_ENVIRONMENT?: string;
   SEGMENT_WRITE_KEY?: string;
+  DISABLE_SEGMENT?: boolean;
   SESSION_SECRET: string;
 }
 

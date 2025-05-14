@@ -5,10 +5,11 @@ import {
   BreadCrumbs,
 } from '@app-builder/components/Breadcrumbs';
 import { Nudge } from '@app-builder/components/Nudge';
-import { type CurrentUser } from '@app-builder/models';
+import { type CurrentUser, isAdmin } from '@app-builder/models';
+import { type Inbox } from '@app-builder/models/inbox';
 import {
   isAccessible,
-  isReadAllInboxesAvailable,
+  isInboxAdmin,
   isReadApiKeyAvailable,
   isReadTagAvailable,
   isReadUserAvailable,
@@ -39,7 +40,7 @@ export const handle = {
   ],
 };
 
-export function getSettings(user: CurrentUser) {
+export function getSettings(user: CurrentUser, inboxes: Inbox[]) {
   const settings = [];
   if (isReadUserAvailable(user)) {
     settings.push({
@@ -48,12 +49,14 @@ export function getSettings(user: CurrentUser) {
       to: getRoute('/settings/users'),
     });
   }
-  settings.push({
-    section: 'scenarios' as const,
-    title: 'scenarios' as const,
-    to: getRoute('/settings/scenarios'),
-  });
-  if (isReadAllInboxesAvailable(user)) {
+  if (isAdmin(user)) {
+    settings.push({
+      section: 'scenarios' as const,
+      title: 'scenarios' as const,
+      to: getRoute('/settings/scenarios'),
+    });
+  }
+  if (isAdmin(user) || inboxes.some((inbox) => isInboxAdmin(user, inbox))) {
     settings.push({
       section: 'case_manager' as const,
       title: 'inboxes' as const,
@@ -81,16 +84,24 @@ export function getSettings(user: CurrentUser) {
       to: getRoute('/settings/webhooks'),
     });
   }
+  if (isAdmin(user)) {
+    settings.push({
+      section: 'case_manager' as const,
+      title: 'data_display' as const,
+      to: getRoute('/settings/data-display'),
+    });
+  }
   return settings;
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { authService } = initServerServices(request);
-  const { user, entitlements } = await authService.isAuthenticated(request, {
+  const { user, entitlements, inbox } = await authService.isAuthenticated(request, {
     failureRedirect: getRoute('/sign-in'),
   });
 
-  const settings = getSettings(user);
+  const inboxes = await inbox.listInboxes();
+  const settings = getSettings(user, inboxes);
 
   const sections = R.pipe(
     settings,

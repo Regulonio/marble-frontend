@@ -1,48 +1,52 @@
-import { type ClientObjectDetail } from '@app-builder/models';
+import { type ClientObjectDetail, type TableModelWithOptions } from '@app-builder/models';
 import { useFormatLanguage } from '@app-builder/utils/format';
 import { parseUnknownData } from '@app-builder/utils/parse';
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as R from 'remeda';
-import { Button } from 'ui-design-system';
+import { Button, cn } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 
 import { FormatData } from '../FormatData';
 
-export function ClientObjectDataList({ data }: { data: ClientObjectDetail['data'] }) {
+type ClientObjectDataListProps = {
+  tableModel: TableModelWithOptions;
+  data: ClientObjectDetail['data'];
+  className?: string;
+  isIncompleteObject?: boolean;
+};
+
+export function ClientObjectDataList({
+  tableModel,
+  isIncompleteObject = false,
+  data,
+  className,
+}: ClientObjectDataListProps) {
   const { t } = useTranslation(['common', 'cases']);
   const language = useFormatLanguage();
-  const parsedData = R.pipe(
-    data,
-    R.omit(['object_id']),
-    R.mapValues(parseUnknownData),
-    R.entries(),
-  );
+  const parsedData = R.pipe(data, R.mapValues(parseUnknownData));
   const [isExpanded, setIsExpanded] = useState(false);
-  const shownData = useMemo(
-    () => (isExpanded || parsedData.length <= 5 ? parsedData : parsedData.slice(0, 5)),
-    [parsedData, isExpanded],
-  );
+  const shouldShowButton = tableModel.fields.some((f) => !f.displayed);
 
   return (
-    <div className="grid grid-cols-[160px,_1fr] gap-x-3 gap-y-2">
-      {data.object_id ? (
-        <>
-          <div className="text-grey-50">ID</div>
-          <div className="truncate">{data.object_id}</div>
-        </>
-      ) : null}
-      {shownData.map(([property, data]) => {
-        return data.value !== null ? (
-          <Fragment key={property}>
-            <div className="text-grey-50 truncate">{property}</div>
+    <div className={cn('grid grid-cols-[160px,_1fr] gap-x-3 gap-y-2', className)}>
+      {tableModel.options.fieldOrder.map((fieldId) => {
+        const field = tableModel.fields.find((f) => f.id === fieldId);
+        if (!field) return null;
+
+        const data = parsedData[field.name];
+
+        return data && (field.displayed || isExpanded) ? (
+          <Fragment key={field.id}>
+            <div className="text-grey-50 truncate">{field.name}</div>
             <div className="truncate">
-              <FormatData data={data} language={language} />
+              {data.value === null ? '-' : <FormatData data={data} language={language} />}
             </div>
           </Fragment>
         ) : null;
       })}
-      {parsedData.length > 5 ? (
+
+      {shouldShowButton && !isIncompleteObject ? (
         <Button
           size="small"
           variant="secondary"

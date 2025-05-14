@@ -1,7 +1,8 @@
 import { DataModelExplorer } from '@app-builder/components/DataModelExplorer/DataModelExplorer';
 import { DataModelExplorerContext } from '@app-builder/components/DataModelExplorer/Provider';
-import { type CurrentUser, type DataModel } from '@app-builder/models';
+import { type CurrentUser, type DataModelWithTableOptions } from '@app-builder/models';
 import { type CaseDetail, type PivotObject } from '@app-builder/models/cases';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CaseManagerDrawerButtons, DrawerBreadcrumb, DrawerContext } from '../Drawer/Drawer';
@@ -11,13 +12,19 @@ type PivotsPanelProps = {
   currentUser: CurrentUser;
   case: CaseDetail;
   pivotObjects: PivotObject[];
-  dataModel: DataModel;
+  dataModel: DataModelWithTableOptions;
 };
 
 export function PivotsPanel(props: PivotsPanelProps) {
   const { t } = useTranslation(['common', 'cases']);
   const dataModelExplorerContext = DataModelExplorerContext.useValue();
   const drawerContext = DrawerContext.useValue();
+
+  useEffect(() => {
+    if (!dataModelExplorerContext.explorerState && drawerContext.isExpanded) {
+      drawerContext.setExpanded(false);
+    }
+  }, [dataModelExplorerContext.explorerState, drawerContext]);
 
   return (
     <>
@@ -38,7 +45,7 @@ export function PivotsPanel(props: PivotsPanelProps) {
       {drawerContext.isExpanded ? (
         <DataModelExplorer dataModel={props.dataModel} />
       ) : (
-        <div className="w-[519px] p-8">
+        <div className="w-[519px] p-8 pt-0">
           <PivotsPanelContent
             currentUser={props.currentUser}
             case={props.case}

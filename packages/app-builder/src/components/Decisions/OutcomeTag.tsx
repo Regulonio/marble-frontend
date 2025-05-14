@@ -1,9 +1,11 @@
+import { type ReviewStatus } from '@app-builder/models/decision';
 import { knownOutcomes, type Outcome } from '@app-builder/models/outcome';
 import clsx from 'clsx';
 import { type ParseKeys } from 'i18next';
-import { useMemo } from 'react';
+import { type ComponentProps, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tag, type TagProps } from 'ui-design-system';
+import { match } from 'ts-pattern';
+import { cn, Tag, type TagProps } from 'ui-design-system';
 
 import { decisionsI18n } from './decisions-i18n';
 
@@ -83,6 +85,45 @@ export function OutcomePanel({ outcome }: { outcome: Outcome }) {
       >
         {t(tKey)}
       </div>
+    </div>
+  );
+}
+
+export function OutcomeBadge({
+  outcome,
+  reviewStatus = null,
+  className,
+  ...rest
+}: ComponentProps<'div'> & { outcome: Outcome; reviewStatus?: ReviewStatus | null }) {
+  const { t } = useTranslation(decisionsI18n);
+
+  return (
+    <div {...rest} className={cn('flex items-center gap-1.5', className)}>
+      <div
+        className={cn('size-4 shrink-0 rounded-full', {
+          'bg-green-38':
+            outcome === 'approve' || (outcome === 'block_and_review' && reviewStatus === 'approve'),
+          'bg-red-47':
+            outcome === 'decline' || (outcome === 'block_and_review' && reviewStatus === 'decline'),
+          'border-red-47 border-2': outcome === 'review',
+          'border-2 border-yellow-50': outcome === 'block_and_review' && reviewStatus === 'pending',
+          'bg-grey-50': outcome === 'unknown',
+        })}
+      />
+      <span className="text-xs font-medium">
+        {match(outcome)
+          .with('approve', () => t('decisions:outcome.tag.approved.label'))
+          .with('decline', () => t('decisions:outcome.tag.declined.label'))
+          .with('block_and_review', () =>
+            match(reviewStatus)
+              .with('approve', () => t('decisions:outcome.tag.manually_approved.label'))
+              .with('decline', () => t('decisions:outcome.tag.manually_declined.label'))
+              .otherwise(() => t('decisions:outcome.block_and_review')),
+          )
+          .with('review', () => t('decisions:outcome.tag.review.label'))
+          .with('unknown', () => t('decisions:outcome.tag.unknown.label'))
+          .exhaustive()}
+      </span>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { CollapsiblePaper, Page } from '@app-builder/components';
 import { BreadCrumbLink, type BreadCrumbProps } from '@app-builder/components/Breadcrumbs';
+import { isAdmin } from '@app-builder/models';
 import { type InboxUser, tKeyForInboxUserRole } from '@app-builder/models/inbox';
 import { DeleteInbox } from '@app-builder/routes/ressources+/settings+/inboxes+/delete';
 import { CreateInboxUser } from '@app-builder/routes/ressources+/settings+/inboxes+/inbox-users.create';
@@ -13,6 +14,7 @@ import {
   isDeleteInboxUserAvailable,
   isEditInboxAvailable,
   isEditInboxUserAvailable,
+  isInboxAdmin,
 } from '@app-builder/services/feature-access';
 import { initServerServices } from '@app-builder/services/init.server';
 import { useOrganizationUsers } from '@app-builder/services/organization/organization-users';
@@ -71,21 +73,27 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const inbox = inboxesList.find((inbox) => inbox.id === inboxId);
 
   if (!inbox) return redirect(getRoute('/settings/inboxes'));
+  if (!isAdmin(user) && !isInboxAdmin(user, inbox)) {
+    return redirect(getRoute('/'));
+  }
+
+  const escalationInboxes = await inboxApi.listInboxesMetadata();
 
   return json({
     inbox,
     inboxesList,
+    escalationInboxes,
     escalationInbox: inbox.escalationInboxId
-      ? await inboxApi.getInbox(inbox.escalationInboxId)
+      ? await inboxApi.getInboxMetadata(inbox.escalationInboxId)
       : null,
     caseCount: inbox.casesCount,
     entitlements,
     inboxUserRoles: getInboxUserRoles(entitlements),
-    isEditInboxAvailable: isEditInboxAvailable(user),
+    isEditInboxAvailable: isEditInboxAvailable(user, inbox),
     isDeleteInboxAvailable: isDeleteInboxAvailable(user),
-    isCreateInboxUserAvailable: isCreateInboxUserAvailable(user),
-    isEditInboxUserAvailable: isEditInboxUserAvailable(user),
-    isDeleteInboxUserAvailable: isDeleteInboxUserAvailable(user),
+    isCreateInboxUserAvailable: isCreateInboxUserAvailable(user, inbox),
+    isEditInboxUserAvailable: isEditInboxUserAvailable(user, inbox),
+    isDeleteInboxUserAvailable: isDeleteInboxUserAvailable(user, inbox),
   });
 }
 
@@ -95,7 +103,7 @@ export default function Inbox() {
   const {
     caseCount,
     inbox,
-    inboxesList,
+    escalationInboxes,
     escalationInbox,
     inboxUserRoles,
     entitlements,
@@ -187,7 +195,7 @@ export default function Inbox() {
             {isEditInboxAvailable ? (
               <UpdateInbox
                 inbox={inbox}
-                inboxesList={inboxesList}
+                escalationInboxes={escalationInboxes}
                 redirectRoutePath="/settings/inboxes/:inboxId"
               />
             ) : null}

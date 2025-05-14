@@ -42,7 +42,7 @@ export const CaseEventFilters = ({
   const language = useFormatLanguage();
   const isDirty = useMemo(
     () =>
-      diff(filters.types, ['comment_added']).length !== 0 ||
+      diff(filters.types, ['comment_added', 'file_added']).length !== 0 ||
       filters.types.length === 0 ||
       filters.startDate ||
       filters.endDate,
@@ -55,10 +55,10 @@ export const CaseEventFilters = ({
         <Button
           variant="secondary"
           size="xs"
-          onClick={() => setFilters({ types: ['comment_added'] })}
+          onClick={() => setFilters({ types: ['comment_added', 'file_added'] })}
         >
           <Icon icon="cross" className="size-4" />
-          <span className="text-xs">Reset</span>
+          <span className="text-xs">{t('cases:case_detail.history.filter_reset')}</span>
         </Button>
       ) : null}
       <MenuCommand.Menu>
@@ -68,7 +68,9 @@ export const CaseEventFilters = ({
             <span className="text-xs">Type</span>
             {filters.types.length > 0 ? <div className="bg-grey-80 mx-1 h-3 w-px" /> : null}
             {filters.types.length >= 3 ? (
-              <Badge>{filters.types.length} selected</Badge>
+              <Badge>
+                {t('cases:case_detail.history.nb_selected', { count: filters.types.length })}
+              </Badge>
             ) : (
               filters.types.map((type) => (
                 <Badge key={type}>{t(`cases:case_detail.history.event_type.${type}`)}</Badge>
@@ -92,19 +94,30 @@ export const CaseEventFilters = ({
                 <span className="text-s">{t(`cases:case_detail.history.event_type.${type}`)}</span>
               </MenuCommand.Item>
             ))}
-            {filters.types.length > 0 ? (
-              <MenuCommand.Item
-                onSelect={() => setFilters((prev) => ({ ...prev, types: ['comment_added'] }))}
+            <div className="bg-grey-100 sticky bottom-0 flex w-full gap-2">
+              <Button
+                variant="secondary"
+                size="small"
+                className="basis-full"
+                onClick={() => setFilters({ types: ['file_added', 'comment_added'] })}
               >
-                Clear Filter
-              </MenuCommand.Item>
-            ) : null}
+                <Icon icon="filters-off" className="size-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="small"
+                className="basis-full"
+                onClick={() => setFilters({ types: caseEventTypes })}
+              >
+                <Icon icon="checked" className="size-3.5" />
+              </Button>
+            </div>
           </MenuCommand.List>
         </MenuCommand.Content>
       </MenuCommand.Menu>
       <MenuCommand.Menu>
         <MenuCommand.Trigger>
-          <Button variant="secondary" size="small">
+          <Button variant="secondary" size="xs">
             <Icon icon="add-circle" className="size-3.5" />
             <span className="text-xs">Date</span>
             {filters.startDate || filters.endDate ? (

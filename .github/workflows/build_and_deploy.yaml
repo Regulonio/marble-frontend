@@ -19,6 +19,13 @@ on:
       SENTRY_AUTH_TOKEN:
         required: true
         description: 'Sentry Auth Token'
+      SEGMENT_WRITE_KEY_OPENSOURCE:
+        description: write key for segment (open source deployment). Can be overridden at runtime
+
+permissions:
+  contents: read
+  actions: read
+  id-token: 'write' # needed for using open id token to authenticate with GCP
 
 jobs:
   main:
@@ -72,6 +79,7 @@ jobs:
             SENTRY_PROJECT=marble-frontend
             SENTRY_RELEASE=${{ inputs.SENTRY_RELEASE }}
             APP_VERSION=${{ steps.version.outputs.MARBLE_VERSION }}
+            SEGMENT_WRITE_KEY_OPENSOURCE=${{ secrets.SEGMENT_WRITE_KEY_OPENSOURCE }}
           secrets: |
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
 

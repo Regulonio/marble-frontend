@@ -18,15 +18,15 @@ import { Button, cn, Modal } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 import { z } from 'zod';
 
+type CloseCaseForm = {
+  caseId: string;
+  comment: string;
+  outcome?: FinalOutcome;
+};
+
 const schema = z.object({
-  caseId: z.string(),
-  outcome: z.union(
-    finalOutcomes.map((o) => z.literal(o)) as [
-      z.ZodLiteral<FinalOutcome>,
-      z.ZodLiteral<FinalOutcome>,
-      ...z.ZodLiteral<FinalOutcome>[],
-    ],
-  ),
+  caseId: z.string().uuid(),
+  outcome: z.enum(finalOutcomes).optional(),
   comment: z.string(),
 });
 
@@ -50,24 +50,24 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (!success) return Response.json({ sucess: false, errors: error.flatten() });
 
+  const { caseId, outcome, comment } = data;
+
   try {
-    const promises = [];
+    const promises = [
+      cases.updateCase({
+        caseId,
+        body: { status: 'closed', outcome },
+      }),
+    ];
 
     if (data.comment !== '') {
       promises.push(
         cases.addComment({
-          caseId: data.caseId,
-          body: { comment: data.comment },
+          caseId,
+          body: { comment },
         }),
       );
     }
-
-    promises.push(
-      cases.updateCase({
-        caseId: data.caseId,
-        body: { status: 'closed', outcome: data.outcome },
-      }),
-    );
 
     await Promise.allSettled(promises);
 
@@ -90,6 +90,12 @@ export const CloseCase = ({ id }: { id: string }) => {
   const fetcher = useFetcher<typeof action>();
   const [open, setOpen] = useState(false);
 
+  const defaultValues: CloseCaseForm = {
+    caseId: id,
+    comment: '',
+    outcome: undefined,
+  };
+
   const form = useForm({
     onSubmit: ({ value }) => {
       setOpen(false);
@@ -99,7 +105,7 @@ export const CloseCase = ({ id }: { id: string }) => {
         encType: 'application/json',
       });
     },
-    defaultValues: { caseId: id, outcome: 'false-positive', comment: '' },
+    defaultValues,
     validators: {
       onChange: schema,
       onBlur: schema,
@@ -112,11 +118,11 @@ export const CloseCase = ({ id }: { id: string }) => {
       <Modal.Trigger asChild>
         <Button variant="primary" size="medium" className="flex-1 first-letter:capitalize">
           <Icon icon="save" className="size-5" />
-          Close case
+          {t('cases:case.close')}
         </Button>
       </Modal.Trigger>
       <Modal.Content>
-        <Modal.Title>Close case</Modal.Title>
+        <Modal.Title>{t('cases:case.close')}</Modal.Title>
         <form onSubmit={handleSubmit(form)} className="flex flex-col gap-8 p-8">
           <form.Field name="outcome">
             {(field) => (

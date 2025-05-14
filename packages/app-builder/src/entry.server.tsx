@@ -12,7 +12,7 @@ import { PassThrough } from 'stream';
 
 import { initServerServices } from './services/init.server';
 import { captureUnexpectedRemixError } from './services/monitoring';
-import { getServerEnv } from './utils/environment';
+import { checkEnv, getServerEnv } from './utils/environment';
 
 const ABORT_DELAY = 70000;
 
@@ -164,6 +164,24 @@ Sentry.init({
 
     return 0.2;
   },
+
+  beforeSend(event, hint) {
+    const error = hint?.originalException;
+    console.log(error);
+
+    // By default, remix will report a sentry error if a POST action is called on an endpoint that does not allow it (no action configured).
+    // Those are noise, as we have no control on who calls out frontend remix server.
+    if (
+      error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      (error.status === 404 || error.status === 405)
+    ) {
+      return null;
+    }
+
+    return event;
+  },
 });
 
 export const handleError: HandleErrorFunction = (error, { request }) => {
@@ -174,3 +192,6 @@ export const handleError: HandleErrorFunction = (error, { request }) => {
   }
   captureUnexpectedRemixError(error, 'remix.server', request);
 };
+
+// Sanity check at startup to verify we have all the environment needed to start the server
+checkEnv();

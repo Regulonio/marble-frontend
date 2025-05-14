@@ -1,5 +1,6 @@
-import { type DataModel } from '@app-builder/models';
-import { useCallback, useState } from 'react';
+import { type DataModelWithTableOptions } from '@app-builder/models';
+import { useCallbackRef } from '@marble/shared';
+import { useState } from 'react';
 import { Button, MenuCommand } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 
@@ -8,65 +9,132 @@ import { DataModelExplorerContext, type DataModelExplorerState } from './Provide
 import { type DataModelExplorerNavigationTab } from './types';
 
 export type DataModelExplorerProps = {
-  dataModel: DataModel;
+  dataModel: DataModelWithTableOptions;
 };
+
+function getTabUniqValue(tab: DataModelExplorerNavigationTab) {
+  const sourceId = tab.sourceObject[tab.sourceFieldName];
+  return `${tab.sourceTableName}_${tab.sourceFieldName}_${sourceId ?? 'unknown'}_${tab.targetTableName}_${tab.filterFieldName}_${tab.orderingFieldName}`;
+}
+
+function findTabWithUniqValue(tabUniqValue: string) {
+  return (tab: DataModelExplorerNavigationTab) => tabUniqValue === getTabUniqValue(tab);
+}
 
 export function DataModelExplorer(props: DataModelExplorerProps) {
   const explorerContext = DataModelExplorerContext.useValue();
 
-  const addTab = useCallback(
-    (tab: DataModelExplorerNavigationTab) => {
-      if (!explorerContext.explorerState) return;
+  const reopenClosedTab = useCallbackRef((tabUniqValue: string) => {
+    if (!explorerContext.explorerState) return;
 
+    const closedTabsHistory = explorerContext.explorerState.closedTabsHistory;
+    const closedTabIndex = closedTabsHistory.findIndex(findTabWithUniqValue(tabUniqValue));
+    if (closedTabIndex < 0) return;
+
+    const closedTab = closedTabsHistory[closedTabIndex];
+    if (!closedTab) return;
+
+    const newClosedHistory = [
+      ...closedTabsHistory.slice(0, closedTabIndex),
+      ...closedTabsHistory.slice(closedTabIndex + 1),
+    ];
+
+    explorerContext.setExplorerState({
+      closedTabsHistory: newClosedHistory,
+      tabs: [...tabs, closedTab],
+      lastActiveTab: explorerContext.explorerState.currentTab,
+      currentTab: closedTab,
+    });
+  });
+
+  const addTab = useCallbackRef((newTab: DataModelExplorerNavigationTab) => {
+    if (!explorerContext.explorerState) return;
+
+    const newTabUniqValue = getTabUniqValue(newTab);
+    const existingTab = explorerContext.explorerState.tabs.find(
+      findTabWithUniqValue(newTabUniqValue),
+    );
+
+    if (existingTab) {
       explorerContext.setExplorerState({
-        tabs: [...explorerContext.explorerState.tabs, tab],
+        ...explorerContext.explorerState,
         lastActiveTab: explorerContext.explorerState.currentTab,
-        currentTab: tab,
+        currentTab: existingTab,
       });
-    },
-    [explorerContext],
-  );
+      return;
+    }
+
+    const existingClosedTab = explorerContext.explorerState.closedTabsHistory.find(
+      findTabWithUniqValue(newTabUniqValue),
+    );
+    if (existingClosedTab) {
+      reopenClosedTab(newTabUniqValue);
+      return;
+    }
+
+    explorerContext.setExplorerState({
+      tabs: [...explorerContext.explorerState.tabs, newTab],
+      lastActiveTab: explorerContext.explorerState.currentTab,
+      currentTab: newTab,
+    });
+  });
+
+  const closeTab = useCallbackRef((tab: DataModelExplorerNavigationTab) => {
+    const nextState: Partial<DataModelExplorerState> = {};
+    const tabIndex = tabs.indexOf(tab);
+
+    if (tabIndex < 0) {
+      return;
+    }
+
+    if (tab === currentTab) {
+      const nextTab = lastActiveTab ?? tabs[tabIndex + 1] ?? tabs[tabIndex - 1];
+      if (nextTab) {
+        nextState.lastActiveTab = null;
+        nextState.currentTab = nextTab;
+      }
+    }
+
+    const nextTabsState = [...tabs.slice(0, tabIndex), ...tabs.slice(tabIndex + 1)];
+    if (nextTabsState.length === 0) {
+      explorerContext.setExplorerState(null);
+    }
+
+    nextState.closedTabsHistory = [...closedTabsHistory, tab];
+    nextState.tabs = nextTabsState;
+
+    explorerContext.setExplorerState(nextState);
+  });
 
   if (!explorerContext.explorerState) {
     return null;
   }
 
   const { currentTab, lastActiveTab, closedTabsHistory, tabs } = explorerContext.explorerState;
-  const tabObjectId = currentTab.sourceObject[currentTab.sourceFieldName];
 
   return (
     <div className="h-[calc(100vh_-_210px)] min-w-[80vw] overflow-y-scroll p-14 py-2">
       <div className="flex flex-col gap-3">
         <div className="before:bg-grey-90 relative py-2 pr-40 before:absolute before:inset-x-0 before:bottom-0 before:h-px">
-          {tabs.map((tab, i) => (
-            <DataModelExplorerTab
-              current={tab === currentTab}
-              key={`${tabObjectId ?? 'unknown'}_${tab.targetTableName}`}
-              label={`${tab.targetTableName}`}
-              onClick={() => {
-                explorerContext.setExplorerState({
-                  lastActiveTab: currentTab,
-                  currentTab: tab,
-                });
-              }}
-              onClose={() => {
-                const nextState: Partial<DataModelExplorerState> = {};
-
-                if (tab === currentTab) {
-                  const nextTab = lastActiveTab ?? tabs[i + 1] ?? tabs[i - 1];
-                  if (nextTab) {
-                    nextState.lastActiveTab = null;
-                    nextState.currentTab = nextTab;
-                  }
-                }
-
-                nextState.closedTabsHistory = [...closedTabsHistory, tab];
-                nextState.tabs = [...tabs.slice(0, i), ...tabs.slice(i + 1)];
-
-                explorerContext.setExplorerState(nextState);
-              }}
-            />
-          ))}
+          {tabs.map((tab) => {
+            const tabUniqValue = getTabUniqValue(tab);
+            return (
+              <DataModelExplorerTab
+                current={tab === currentTab}
+                key={tabUniqValue}
+                label={`${tab.targetTableName}`}
+                onClick={() => {
+                  explorerContext.setExplorerState({
+                    lastActiveTab: currentTab,
+                    currentTab: tab,
+                  });
+                }}
+                onClose={() => {
+                  closeTab(tab);
+                }}
+              />
+            );
+          })}
           <TabBarActions
             className="absolute right-2 top-2"
             options={[
@@ -82,11 +150,7 @@ export function DataModelExplorer(props: DataModelExplorerProps) {
                   const tab = closedTabsHistory[closedTabsHistory.length - 1];
                   if (!tab) return;
 
-                  explorerContext.setExplorerState({
-                    closedTabsHistory: closedTabsHistory.slice(0, -1),
-                    tabs: [...tabs, tab],
-                    currentTab: tab,
-                  });
+                  reopenClosedTab(getTabUniqValue(tab));
                   break;
                 }
                 default:

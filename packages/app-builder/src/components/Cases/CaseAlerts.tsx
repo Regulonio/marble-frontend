@@ -2,117 +2,164 @@ import { type loader } from '@app-builder/routes/_builder+/cases+/$caseId+/_inde
 import { formatDateTime, useFormatLanguage } from '@app-builder/utils/format';
 import { parseUnknownData } from '@app-builder/utils/parse';
 import { Await, useLoaderData } from '@remix-run/react';
-import { Dict } from '@swan-io/boxed';
-import { Suspense } from 'react';
-import { match } from 'ts-pattern';
+import { Suspense, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { filter, map, pipe, take } from 'remeda';
 import { Button, cn } from 'ui-design-system';
 
+import { OutcomeBadge } from '../Decisions';
 import { FormatData } from '../FormatData';
+import { ScoreModifier } from '../Scenario/Rules/ScoreModifier';
+import { casesI18n } from './cases-i18n';
 import { RequiredActions } from './RequiredActions';
 
-export const CaseAlerts = ({ selectDecision }: { selectDecision: (id: string) => void }) => {
-  const { decisionsPromise } = useLoaderData<typeof loader>();
+const MAX_ITEMS_DISPLAYED = 4;
+
+export const CaseAlerts = ({
+  selectDecision,
+  setDrawerContentMode,
+  drawerContentMode,
+}: {
+  selectDecision: (id: string) => void;
+  setDrawerContentMode: (mode: 'pivot' | 'decision' | 'snooze') => void;
+  drawerContentMode: 'pivot' | 'decision' | 'snooze';
+}) => {
+  const { t } = useTranslation(casesI18n);
+  const {
+    decisionsPromise,
+    case: caseDetail,
+    dataModelWithTableOptions,
+  } = useLoaderData<typeof loader>();
   const language = useFormatLanguage();
+  const [selectedDecision, setSelectedDecision] = useState<string | null>(null);
 
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div>...</div>}>
       <Await resolve={decisionsPromise}>
         {(decisions) => (
           <div className="border-grey-90 bg-grey-100 rounded-lg border">
-            <div className="text-2xs text-grey-50 grid grid-cols-[82px_1fr_250px_175px] font-normal">
-              <span className="p-2">Date</span>
-              <span className="p-2">Alert</span>
-              <span className="p-2">Trigger object</span>
-              <span className="p-2">Rules hit</span>
+            <div className="text-2xs text-grey-50 grid grid-cols-[82px_2fr_1.3fr_1fr] font-normal">
+              <span className="p-2">{t('cases:decisions.date')}</span>
+              <span className="p-2">{t('cases:decisions.alert')}</span>
+              <span className="p-2">{t('cases:decisions.trigger_object')}</span>
+              <span className="p-2">{t('cases:decisions.rule_hits')}</span>
             </div>
-            {decisions.map((decision, index) => (
-              <div
-                key={decision.id}
-                className={cn(
-                  'border-grey-90 hover:bg-grey-98 group grid min-h-24 grid-cols-[82px_1fr_250px_175px] border-y transition-colors',
-                  {
-                    'border-b-0': index === decisions.length - 1,
-                    'border-t-0': index !== 0,
-                  },
-                )}
-              >
-                <div className="flex min-h-full flex-col items-center p-2">
-                  <span className="text-grey-50 text-xs font-normal">
-                    {formatDateTime(decision.createdAt, { language, timeStyle: undefined })}
-                  </span>
-                </div>
-                <div className="border-grey-90 flex min-h-full flex-col gap-2 border-x p-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex size-full items-center gap-2">
-                      <div className="flex items-center gap-1">
-                        <div
-                          className={cn('size-4 rounded-full', {
-                            'bg-green-38': decision.outcome === 'approve',
-                            'bg-red-47': decision.outcome === 'decline',
-                            'border-red-47 border-2': decision.outcome === 'review',
-                            'border-2 border-yellow-50': decision.outcome === 'block_and_review',
-                            'bg-grey-50': decision.outcome === 'unknown',
-                          })}
-                        />
-                        <span className="text-xs font-medium">
-                          {match(decision.outcome)
-                            .with('approve', () => 'Manually approved')
-                            .with('decline', () => 'Manually declined')
-                            .with('block_and_review', () => 'Blocked and review')
-                            .with('review', () => 'Review')
-                            .with('unknown', () => 'Unknown')
-                            .exhaustive()}
-                        </span>
-                      </div>
-                      <span className="text-ellipsis text-xs font-normal">
-                        {decision.scenario.name}
-                      </span>
-                      <span className="bg-purple-96 text-purple-65 rounded-full px-2 py-[3px] text-xs font-normal">
-                        +{decision.score}
-                      </span>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      className="hidden group-hover:flex"
-                      onClick={() => selectDecision(decision.id)}
-                    >
-                      Open
-                    </Button>
-                  </div>
-                  <RequiredActions decision={decision} />
-                </div>
-                <div className="border-grey-90 flex h-0 min-h-full flex-col items-start gap-1 truncate border-r p-2">
-                  {Dict.entries(decision.triggerObject).map(([key, value]) => {
-                    if (['account_id', 'object_id', 'company_id'].includes(key)) return null;
+            {decisions.map((decision) => {
+              const triggerObjectOptions = dataModelWithTableOptions.find(
+                ({ name }) => name === decision.triggerObjectType,
+              );
 
-                    return (
-                      <span
-                        key={key}
-                        className="border-grey-90 flex gap-1 rounded-sm border px-1.5 py-0.5 text-xs"
+              return (
+                <div
+                  key={decision.id}
+                  className={cn(
+                    'border-grey-90 hover:bg-grey-98 group grid min-h-28 grid-cols-[82px_2fr_1.3fr_1fr] border-t transition-colors',
+                    {
+                      'bg-purple-98':
+                        selectedDecision === decision.id && drawerContentMode === 'decision',
+                    },
+                  )}
+                >
+                  <div className="flex min-h-full flex-col items-center p-2">
+                    <span className="text-grey-50 text-xs font-normal">
+                      {formatDateTime(decision.createdAt, { language, timeStyle: undefined })}
+                    </span>
+                  </div>
+                  <div className="border-grey-90 flex min-h-full flex-col gap-2 border-x p-2">
+                    <div className="relative flex items-center justify-between">
+                      <div className="flex size-full items-center gap-2.5">
+                        <OutcomeBadge
+                          outcome={decision.outcome}
+                          reviewStatus={decision.reviewStatus}
+                        />
+                        <span className="text-grey-50 text-ellipsis text-xs font-normal">
+                          {decision.scenario.name}
+                        </span>
+                        <ScoreModifier score={decision.score} />
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        className="absolute right-0 top-0 hidden group-hover:flex"
+                        onClick={() => {
+                          selectDecision(decision.id);
+                          setSelectedDecision(decision.id);
+                          setDrawerContentMode('decision');
+                        }}
                       >
-                        <span>{key}:</span>
-                        <FormatData data={parseUnknownData(value)} language={language} />
-                      </span>
-                    );
-                  })}
+                        {t('common:open')}
+                      </Button>
+                    </div>
+                    <RequiredActions decision={decision} caseId={caseDetail.id} />
+                  </div>
+                  <div className="border-grey-90 flex h-full flex-col items-start gap-1 overflow-hidden border-r p-2">
+                    {pipe(
+                      triggerObjectOptions?.options.fieldOrder ?? [],
+                      filter((id) =>
+                        triggerObjectOptions?.options.displayedFields
+                          ? triggerObjectOptions.options.displayedFields.includes(id)
+                          : true,
+                      ),
+                      take(MAX_ITEMS_DISPLAYED),
+                      map((id) => {
+                        const property = triggerObjectOptions?.fields.find(
+                          (f) => f.id === id,
+                        )?.name;
+
+                        return property ? (
+                          <span
+                            key={id}
+                            className="border-grey-90 flex w-fit gap-1 truncate rounded-sm border px-1.5 py-0.5 text-xs"
+                          >
+                            <span>{property}:</span>
+                            <FormatData
+                              data={parseUnknownData(decision.triggerObject[property])}
+                              language={language}
+                            />
+                          </span>
+                        ) : null;
+                      }),
+                    )}
+                  </div>
+                  <div className="flex min-h-full flex-col items-start gap-1 truncate p-2">
+                    {pipe(
+                      decision.ruleExecutions,
+                      filter((r) => r.outcome === 'hit'),
+                      (arr) => {
+                        if (arr.length > MAX_ITEMS_DISPLAYED) {
+                          // We add a fake rule execution to display the number of remaining executions
+                          const items = take(arr, MAX_ITEMS_DISPLAYED - 1);
+                          items.push({
+                            name: 'executions-remains',
+                            scoreModifier: arr.length - items.length,
+                            outcome: 'hit',
+                            ruleId: '',
+                          });
+                          return items;
+                        }
+                        return take(arr, MAX_ITEMS_DISPLAYED);
+                      },
+                      map((r) => (
+                        <span
+                          key={r.name}
+                          className="border-grey-90 flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs font-normal"
+                        >
+                          {r.name === 'executions-remains' ? (
+                            <span>{t('common:more_remains', { count: r.scoreModifier })}</span>
+                          ) : (
+                            <>
+                              <span>{r.scoreModifier > 0 ? '+' : '-'}</span>
+                              <span>{Math.abs(r.scoreModifier)}</span>
+                              <span>{r.name}</span>
+                            </>
+                          )}
+                        </span>
+                      )),
+                    )}
+                  </div>
                 </div>
-                <div className="flex min-h-full flex-col items-start gap-1 truncate p-2">
-                  {decision.ruleExecutions
-                    .filter((r) => r.outcome === 'hit')
-                    .map((r) => (
-                      <span
-                        key={r.name}
-                        className="border-grey-90 flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs font-normal"
-                      >
-                        <span>{r.scoreModifier > 0 ? '+' : '-'}</span>
-                        <span>{r.scoreModifier}</span>
-                        <span>{r.name}</span>
-                      </span>
-                    ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Await>

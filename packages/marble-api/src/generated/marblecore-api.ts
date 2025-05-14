@@ -60,7 +60,7 @@ export type CaseDto = {
     decisions_count: number;
     name: string;
     status: CaseStatusDto;
-    outcome?: "false_positive" | "valuable_alert" | "confirmed_risk" | "unset";
+    outcome: "false_positive" | "valuable_alert" | "confirmed_risk" | "unset";
     inbox_id: string;
     contributors: CaseContributorDto[];
     tags: CaseTagDto[];
@@ -889,12 +889,16 @@ export type CreateNavigationOptionDto = {
     ordering_field_id?: string;
 };
 export type DataModelTableOptionsDto = {
-    /** List of ordered field IDs to display when navigating the table */
+    /** List of field IDs to display when navigating the table */
     displayed_fields?: string[];
+    /** List of field IDs in their display order */
+    field_order: string[];
 };
 export type SetDataModelTableOptionsBodyDto = {
-    /** List of ordered field IDs to display when navigating the table */
+    /** List of field IDs to display when navigating the table */
     displayed_fields?: string[];
+    /** List of field IDs in their display order */
+    field_order: string[];
 };
 export type AnalyticsDto = {
     embedding_type: "global_dashboard" | "unknown_embedding_type";
@@ -973,6 +977,10 @@ export type InboxDto = {
     escalation_inbox_id?: string;
 };
 export type CreateInboxBodyDto = {
+    name: string;
+};
+export type InboxMetadataDto = {
+    id: string;
     name: string;
 };
 export type AddInboxUserBodyDto = {
@@ -1156,7 +1164,7 @@ export function createDecision(createDecisionBody: CreateDecisionBody, opts?: Oa
 /**
  * List cases
  */
-export function listCases({ status, inboxId, startDate, endDate, sorting, name, offsetId, limit, order, includeSnoozed }: {
+export function listCases({ status, inboxId, startDate, endDate, sorting, name, offsetId, limit, order, includeSnoozed, assigneeId }: {
     status?: CaseStatusDto[];
     inboxId?: string[];
     startDate?: string;
@@ -1167,6 +1175,7 @@ export function listCases({ status, inboxId, startDate, endDate, sorting, name, 
     limit?: number;
     order?: "ASC" | "DESC";
     includeSnoozed?: boolean;
+    assigneeId?: string;
 } = {}, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -1189,7 +1198,8 @@ export function listCases({ status, inboxId, startDate, endDate, sorting, name, 
         offset_id: offsetId,
         limit,
         order,
-        include_snoozed: includeSnoozed
+        include_snoozed: includeSnoozed,
+        assignee_id: assigneeId
     }))}`, {
         ...opts
     }));
@@ -3452,6 +3462,26 @@ export function createInbox(createInboxBodyDto: CreateInboxBodyDto, opts?: Oazap
     })));
 }
 /**
+ * Get an inbox metadata by id
+ */
+export function listInboxesMetadata(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: InboxMetadataDto[];
+    } | {
+        status: 401;
+        data: string;
+    } | {
+        status: 403;
+        data: string;
+    } | {
+        status: 404;
+        data: string;
+    }>("/inboxes/metadata", {
+        ...opts
+    }));
+}
+/**
  * Get an inbox by id
  */
 export function getInbox(inboxId: string, opts?: Oazapfts.RequestOpts) {
@@ -3512,6 +3542,26 @@ export function deleteInbox(inboxId: string, opts?: Oazapfts.RequestOpts) {
     }>(`/inboxes/${encodeURIComponent(inboxId)}`, {
         ...opts,
         method: "DELETE"
+    }));
+}
+/**
+ * Get an inbox metadata by id
+ */
+export function getInboxMetadata(inboxId: string, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: InboxMetadataDto;
+    } | {
+        status: 401;
+        data: string;
+    } | {
+        status: 403;
+        data: string;
+    } | {
+        status: 404;
+        data: string;
+    }>(`/inboxes/${encodeURIComponent(inboxId)}/metadata`, {
+        ...opts
     }));
 }
 /**

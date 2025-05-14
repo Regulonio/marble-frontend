@@ -1,18 +1,29 @@
 import { CaseStatusTag } from '@app-builder/components/Cases';
 import { ClientObjectDataList } from '@app-builder/components/DataModelExplorer/ClientObjectDataList';
-import { type ClientObjectDetail, type CurrentUser, type DataModel } from '@app-builder/models';
+import {
+  type CurrentUser,
+  type DataModelWithTableOptions,
+  isAdmin,
+  type TableModelWithOptions,
+} from '@app-builder/models';
 import { type CaseDetail, type PivotObject } from '@app-builder/models/cases';
 import { usePivotRelatedCasesQuery } from '@app-builder/queries/pivot-related-cases';
 import { getRoute } from '@app-builder/utils/routes';
 import { fromUUIDtoSUUID } from '@app-builder/utils/short-uuid';
 import { Link } from '@remix-run/react';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { Fragment, type ReactNode, useState } from 'react';
+import { Fragment, type ReactNode, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { match } from 'ts-pattern';
 import { CtaClassName } from 'ui-design-system';
 
 import { PivotNavigationOptions } from './PivotNavigationOptions';
+
+function pivotUniqKey(pivotObject?: PivotObject) {
+  return pivotObject
+    ? `${pivotObject.pivotObjectName}_${pivotObject.pivotFieldName}_${pivotObject.pivotValue}`
+    : null;
+}
 
 export function PivotsPanelContent({
   currentUser,
@@ -24,46 +35,77 @@ export function PivotsPanelContent({
   currentUser: CurrentUser;
   case: CaseDetail;
   pivotObjects: PivotObject[];
-  dataModel: DataModel;
+  dataModel: DataModelWithTableOptions;
   onExplore: () => void;
 }) {
   const { t } = useTranslation(['cases']);
 
-  if (!pivotObjects[0]) {
-    throw new Error('no pivot object');
-  }
-
   const [currentPivotObject, setCurrentPivotObject] = useState(pivotObjects[0]);
-  const currentTable = dataModel.find((t) => t.name === currentPivotObject.pivotObjectName);
+  const currentTable = dataModel.find((t) => t.name === currentPivotObject?.pivotObjectName);
+  const decisionsPivotValues = useMemo(
+    () => caseObj.decisions.flatMap((d) => d.pivotValues),
+    [caseObj],
+  );
+  const isAllMissingPivotObject = decisionsPivotValues.every(
+    (pivotValue) =>
+      !pivotObjects.find((pivotObject) => pivotObject.pivotValue === pivotValue.value),
+  );
 
   return (
     <div className="flex flex-col gap-8">
-      <h2 className="text-l font-semibold">{t('cases:case_detail.pivot_panel.title')}</h2>
-      {pivotObjects.length > 1 ? (
-        <div className="border-grey-90 flex h-12 gap-2 self-start rounded-lg border p-1">
-          {pivotObjects.map((pivotObject, idx) => (
-            <button
-              key={pivotObject.pivotValue}
-              className="text-grey-50 aria-[current=true]:bg-purple-96 aria-[current=true]:text-purple-65 rounded p-1 px-4"
-              aria-current={pivotObject.pivotValue === currentPivotObject.pivotValue}
-              onClick={() => setCurrentPivotObject(pivotObject)}
+      {isAllMissingPivotObject ? (
+        <div className="border-grey-90 flex h-40 flex-col items-center justify-center gap-2 rounded border p-8">
+          <span className="text-center">
+            {isAdmin(currentUser)
+              ? t('cases:case_detail.pivot_panel.missing_pivot.admin')
+              : t('cases:case_detail.pivot_panel.missing_pivot')}
+          </span>
+          {isAdmin(currentUser) ? (
+            <Link
+              to={getRoute('/data')}
+              className={CtaClassName({ variant: 'secondary', size: 'small' })}
             >
-              {pivotObject.pivotObjectName} {idx + 1}
-            </button>
-          ))}
+              {t('cases:case_detail.pivot_panel.missing_pivot_cta')}
+            </Link>
+          ) : null}
         </div>
       ) : null}
-      <PivotObjectDetails pivotObjectData={currentPivotObject.pivotObjectData} />
-      {currentTable ? (
-        <PivotNavigationOptions
-          currentUser={currentUser}
-          pivotObject={currentPivotObject}
-          table={currentTable}
-          dataModel={dataModel}
-          onExplore={onExplore}
-        />
+      {pivotObjects.length > 1 ? (
+        <div className="border-grey-90 flex h-12 gap-2 self-start rounded-lg border p-1">
+          {pivotObjects.map((pivotObject, idx) => {
+            const uniqKey = pivotUniqKey(pivotObject);
+            return (
+              <button
+                key={uniqKey}
+                className="text-grey-50 aria-[current=true]:bg-purple-96 aria-[current=true]:text-purple-65 rounded p-1 px-4"
+                aria-current={uniqKey === pivotUniqKey(currentPivotObject)}
+                onClick={() => setCurrentPivotObject(pivotObject)}
+              >
+                {pivotObject.pivotObjectName} {idx + 1}
+              </button>
+            );
+          })}
+        </div>
       ) : null}
-      <RelatedCases pivotValue={currentPivotObject.pivotValue} currentCase={caseObj} />
+      {currentTable && currentPivotObject ? (
+        <>
+          <PivotObjectDetails
+            tableModel={currentTable}
+            dataModel={dataModel}
+            pivotObject={currentPivotObject}
+          />
+          <PivotNavigationOptions
+            currentUser={currentUser}
+            pivotObject={currentPivotObject}
+            table={currentTable}
+            dataModel={dataModel}
+            onExplore={onExplore}
+          />
+        </>
+      ) : null}
+      {currentPivotObject ? (
+        <RelatedCases pivotValue={currentPivotObject.pivotValue} currentCase={caseObj} />
+      ) : null}
     </div>
   );
 }
@@ -111,7 +153,7 @@ function RelatedCases({
 
       return (
         <DataCard borderless title={t('cases:case_detail.pivot_panel.case_history')}>
-          <div className="grid w-full grid-cols-[1fr_auto_96px]">
+          <div className="grid w-full grid-cols-[1fr_auto_auto]">
             {cases.map((caseObj, idx) => {
               const isLast = idx === cases.length - 1;
 
@@ -136,7 +178,7 @@ function RelatedCases({
                   <div
                     className={cellVariants({ isLast, className: 'flex items-center border-l' })}
                   >
-                    <CaseStatusTag status={caseObj.status} />
+                    <CaseStatusTag status={caseObj.status} outcome={caseObj.outcome} />
                   </div>
                 </Fragment>
               );
@@ -148,30 +190,45 @@ function RelatedCases({
 }
 
 type PivotObjectDetailsProps = {
-  pivotObjectData: ClientObjectDetail;
+  tableModel: TableModelWithOptions;
+  dataModel: DataModelWithTableOptions;
+  pivotObject: PivotObject;
 };
-function PivotObjectDetails({ pivotObjectData }: PivotObjectDetailsProps) {
+function PivotObjectDetails({ tableModel, dataModel, pivotObject }: PivotObjectDetailsProps) {
   const { t } = useTranslation(['common', 'cases']);
-  const { data, relatedObjects } = pivotObjectData;
+  const { data, relatedObjects } = pivotObject.pivotObjectData;
 
   return (
-    <DataCard title={t('cases:case_detail.pivot_panel.informations')}>
+    <DataCard title={t('cases:case_detail.pivot_panel.informations')} subtitle={tableModel.name}>
       <div className="mt-3 flex flex-col gap-8">
-        <ClientObjectDataList data={data} />
+        <ClientObjectDataList
+          tableModel={tableModel}
+          data={data}
+          isIncompleteObject={!pivotObject.isIngested}
+        />
         {relatedObjects ? (
           <div className="">
-            {relatedObjects.map((relatedObject) =>
-              relatedObject.linkName && relatedObject.relatedObjectDetail ? (
-                <Fragment key={relatedObject.linkName}>
-                  <h4 className="border-grey-90 border-b text-right text-xs font-semibold">
+            {relatedObjects.map((relatedObject) => {
+              if (!relatedObject.relatedObjectDetail?.metadata) return null;
+
+              const relatedObjectType = relatedObject.relatedObjectDetail.metadata.objectType;
+              const relatedObjectTable = dataModel.find((tm) => tm.name === relatedObjectType);
+              if (!relatedObjectTable) return null;
+
+              return (
+                <Fragment key={relatedObjectType}>
+                  <h4 className="border-grey-90 mb-3 border-b text-right text-xs font-semibold">
                     {t('cases:case_detail.pivot_panel.related_object', {
-                      vallinkName: relatedObject.linkName,
+                      tableName: relatedObject.linkName ?? relatedObjectType,
                     })}
                   </h4>
-                  <ClientObjectDataList data={relatedObject.relatedObjectDetail.data} />
+                  <ClientObjectDataList
+                    tableModel={relatedObjectTable}
+                    data={relatedObject.relatedObjectDetail.data}
+                  />
                 </Fragment>
-              ) : null,
-            )}
+              );
+            })}
           </div>
         ) : null}
       </div>
@@ -179,7 +236,7 @@ function PivotObjectDetails({ pivotObjectData }: PivotObjectDetailsProps) {
   );
 }
 
-const titleVariants = cva('text-s px-2 py-3 font-semibold', {
+const titleVariants = cva('text-s px-2 py-3 font-semibold flex justify-between items-center', {
   variants: {
     borderless: {
       true: null,
@@ -193,12 +250,16 @@ const titleVariants = cva('text-s px-2 py-3 font-semibold', {
 
 type DataCardProps = {
   title: string;
+  subtitle?: string;
   children: ReactNode;
 } & VariantProps<typeof titleVariants>;
-function DataCard({ title, children, borderless }: DataCardProps) {
+function DataCard({ title, subtitle, children, borderless }: DataCardProps) {
   return (
     <div>
-      <h3 className={titleVariants({ borderless })}>{title}</h3>
+      <h3 className={titleVariants({ borderless })}>
+        <span>{title}</span>
+        {subtitle ? <span className="text-purple-82 text-xs">{subtitle}</span> : null}
+      </h3>
       {children}
     </div>
   );

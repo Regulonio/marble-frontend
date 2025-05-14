@@ -31,6 +31,8 @@ import { omit } from 'remeda';
 import { Button, Checkbox, Input } from 'ui-design-system';
 import { Icon } from 'ui-icons';
 
+import { MY_INBOX_ID } from './_index';
+
 export const handle = {
   i18n: ['navigation', ...casesI18n] satisfies Namespace,
 };
@@ -63,27 +65,32 @@ export const buildQueryParams = (
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { authService } = initServerServices(request);
-  const { cases } = await authService.isAuthenticated(request, {
+  const { cases, user } = await authService.isAuthenticated(request, {
     failureRedirect: getRoute('/sign-in'),
   });
 
   const parsedResult = await parseIdParamSafe(params, 'inboxId');
-  if (!parsedResult.success) {
+  // The MY_INBOX_ID is not an actual inboxId, but a special case to get the cases assigned to the user
+  if (!parsedResult.success && params['inboxId'] !== MY_INBOX_ID) {
     return badRequest('Invalid inbox UUID');
   }
-  const { inboxId } = parsedResult.data;
+
+  const inboxId = parsedResult.success ? parsedResult.data.inboxId : null;
 
   const parsedQuery = await parseQuerySafe(request, casesFiltersSchema);
   const parsedPaginationQuery = await parseQuerySafe(request, paginationSchema);
   if (!parsedQuery.success || !parsedPaginationQuery.success) {
-    return redirect(getRoute('/cases/inboxes/:inboxId', { inboxId: fromUUIDtoSUUID(inboxId) }));
+    return inboxId
+      ? redirect(getRoute('/cases/inboxes/:inboxId', { inboxId: fromUUIDtoSUUID(inboxId) }))
+      : redirect(getRoute('/cases'));
   }
 
   const filtersForBackend: CaseFilters = {
     ...parsedQuery.data,
     ...parsedPaginationQuery.data,
-    inboxIds: [inboxId],
+    ...(inboxId && { inboxIds: [inboxId] }),
     statuses: parsedQuery.data.statuses as CaseStatus[] | undefined,
+    ...(!inboxId && { assigneeId: user.actorIdentity.userId }),
   };
 
   try {
@@ -193,7 +200,9 @@ export default function Cases() {
       if (!pagination) {
         reset();
 
-        const pathname = getRoute('/cases/inboxes/:inboxId', { inboxId: fromUUIDtoSUUID(inboxId) });
+        const pathname = getRoute('/cases/inboxes/:inboxId', {
+          inboxId: inboxId ? fromUUIDtoSUUID(inboxId) : MY_INBOX_ID,
+        });
         const search = qs.stringify(buildQueryParams(casesFilters, null, null), {
           addQueryPrefix: true,
           skipNulls: true,
@@ -219,7 +228,7 @@ export default function Cases() {
         navigate(
           {
             pathname: getRoute('/cases/inboxes/:inboxId', {
-              inboxId: fromUUIDtoSUUID(inboxId),
+              inboxId: inboxId ? fromUUIDtoSUUID(inboxId) : MY_INBOX_ID,
             }),
             search: qs.stringify(buildQueryParams(casesFilters, null, pagination.order), {
               addQueryPrefix: true,
@@ -271,6 +280,7 @@ export default function Cases() {
               </div>
               <CasesFiltersBar />
               <CasesList
+                key={inboxId}
                 cases={cases}
                 className="max-h-[60dvh]"
                 onSortingChange={(state) => {

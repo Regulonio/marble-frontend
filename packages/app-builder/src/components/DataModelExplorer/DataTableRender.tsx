@@ -1,4 +1,8 @@
-import { type ClientDataListResponse, type DataModel, type TableModel } from '@app-builder/models';
+import {
+  type ClientDataListResponse,
+  type DataModelWithTableOptions,
+  type TableModelWithOptions,
+} from '@app-builder/models';
 import { type PivotObject } from '@app-builder/models/cases';
 import { useClientObjectListQuery } from '@app-builder/queries/client-object-list';
 import { useFormatLanguage } from '@app-builder/utils/format';
@@ -16,8 +20,9 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import clsx from 'clsx';
-import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import * as R from 'remeda';
 import { match } from 'ts-pattern';
 import { Button, MenuCommand } from 'ui-design-system';
 import { Icon } from 'ui-icons';
@@ -28,7 +33,7 @@ import { type DataModelExplorerNavigationTab } from './types';
 
 export type DataTableRenderProps = {
   item: DataModelExplorerNavigationTab;
-  dataModel: DataModel;
+  dataModel: DataModelWithTableOptions;
   navigateTo: (tabItem: DataModelExplorerNavigationTab) => void;
 };
 
@@ -38,14 +43,6 @@ export function DataTableRender({ dataModel, item, navigateTo }: DataTableRender
   const sourceField = item.sourceObject[item.sourceFieldName];
   const filterFieldValue =
     typeof sourceField === 'string' || typeof sourceField === 'number' ? sourceField : '';
-  const [currentOffset, setCurrentOffset] = useState<string | number | null>(null);
-  const uniqueRelationKey = `${filterFieldValue}_${item.targetTableName}`;
-  const uniqueRelationKeyRef = useRef(uniqueRelationKey);
-
-  if (uniqueRelationKeyRef.current !== uniqueRelationKey) {
-    uniqueRelationKeyRef.current = uniqueRelationKey;
-    setCurrentOffset(null);
-  }
 
   const dataListQuery = useClientObjectListQuery({
     tableName: item.targetTableName,
@@ -54,7 +51,6 @@ export function DataTableRender({ dataModel, item, navigateTo }: DataTableRender
       filterFieldName: item.filterFieldName,
       filterFieldValue,
       orderingFieldName: item.orderingFieldName,
-      offsetId: currentOffset,
     },
   });
 
@@ -66,17 +62,26 @@ export function DataTableRender({ dataModel, item, navigateTo }: DataTableRender
     );
   }
 
+  const sourceTableModel = dataModel.find((tm) => tm.name === item.sourceTableName);
+  const pivotTableModel = dataModel.find((tm) => tm.name === item.pivotObject.pivotObjectName);
+
   return (
     <div className="mt-3 flex flex-col gap-3">
-      <div className="grid grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <span className="text-s font-semibold">{item.sourceTableName}</span>
-          <ClientObjectDataList data={item.sourceObject} />
-        </div>
-        {filterFieldValue !== item.pivotObject.pivotValue ? (
+      <div className="grid grid-cols-2 gap-3">
+        {sourceTableModel ? (
           <div className="flex flex-col gap-2">
+            <span className="text-s font-semibold">{item.sourceTableName}</span>
+            <ClientObjectDataList tableModel={sourceTableModel} data={item.sourceObject} />
+          </div>
+        ) : null}
+        {filterFieldValue !== item.pivotObject.pivotValue && pivotTableModel ? (
+          <div className="col-start-2 flex flex-col gap-2">
             <span className="text-s font-semibold">{item.pivotObject.pivotObjectName}</span>
-            <ClientObjectDataList data={item.pivotObject.pivotObjectData.data} />
+            <ClientObjectDataList
+              tableModel={pivotTableModel}
+              data={item.pivotObject.pivotObjectData.data}
+              isIncompleteObject={!item.pivotObject.isIngested}
+            />
           </div>
         ) : null}
       </div>
@@ -98,12 +103,13 @@ export function DataTableRender({ dataModel, item, navigateTo }: DataTableRender
               pivotObject={item.pivotObject}
               table={currentTable}
               navigateTo={navigateTo}
-              list={query.data.clientDataListResponse.data}
+              list={query.data.pages.flatMap((page) => page.clientDataListResponse.data)}
               pagination={
                 <DataTablePagination
-                  pagination={query.data.clientDataListResponse.pagination}
-                  onNext={(offsetId) => {
-                    setCurrentOffset(offsetId);
+                  hasNext={query.hasNextPage}
+                  isLoading={query.isFetchingNextPage}
+                  onNext={() => {
+                    query.fetchNextPage();
                   }}
                 />
               }
@@ -115,27 +121,32 @@ export function DataTableRender({ dataModel, item, navigateTo }: DataTableRender
 }
 
 type DataTablePaginationProps = {
-  pagination: ClientDataListResponse['pagination'];
-  onNext: (offsetId: string | number) => void;
+  hasNext: boolean;
+  isLoading: boolean;
+  onNext: () => void;
 };
 
-function DataTablePagination({ pagination, onNext }: DataTablePaginationProps) {
-  const nextCursorId =
-    pagination.hasNextPage && pagination.nextCursorId ? pagination.nextCursorId : null;
+function DataTablePagination({ hasNext, isLoading, onNext }: DataTablePaginationProps) {
+  const { t } = useTranslation(['common']);
   return (
     <>
-      {nextCursorId ? (
-        <Button variant="secondary" onClick={() => onNext(nextCursorId)}>
-          <Icon icon="arrow-right" className="size-4" />
+      {hasNext ? (
+        <Button variant="secondary" size="small" onClick={onNext} disabled={isLoading}>
+          <Icon icon="arrow-up" className="size-4 rotate-180" />
+          {t('common:load_more_results')}
         </Button>
       ) : null}
     </>
   );
 }
 
+function getColumnList(tableModel: TableModelWithOptions) {
+  return tableModel.fields.filter((f) => f.displayed).map((f) => f.name);
+}
+
 type DataTableProps = {
   pivotObject: PivotObject;
-  table: TableModel;
+  table: TableModelWithOptions;
   list: ClientDataListResponse['data'];
   pagination: ReactElement;
   navigateTo: (tab: DataModelExplorerNavigationTab) => void;
@@ -146,15 +157,20 @@ function DataTable({ pivotObject, table, list, pagination, navigateTo }: DataTab
   const language = useFormatLanguage();
 
   const columnHelper = createColumnHelper<Record<string, unknown>>();
-  const [columnList, setColumnList] = useState(() => table.fields.map((f) => f.name));
-  const columnOrder = useMemo(
-    () => ['object_id', ...table.fields.map((f) => f.name).filter((f) => f !== 'object_id')],
-    [table],
-  );
+  const [columnList, setColumnList] = useState(() => {
+    return getColumnList(table);
+  });
   const tableData = useMemo(() => list.map((d) => d.data), [list]);
+  const fieldOrder = useMemo(() => {
+    return R.pipe(
+      table.options.fieldOrder,
+      R.map((fieldId) => table.fields.find((f) => f.id === fieldId)?.name),
+      R.filter((fieldName): fieldName is string => !!fieldName),
+    );
+  }, [table]);
 
   useEffect(() => {
-    setColumnList(table.fields.map((f) => f.name));
+    setColumnList(getColumnList(table));
   }, [table]);
 
   const columns = useMemo(() => {
@@ -179,7 +195,7 @@ function DataTable({ pivotObject, table, list, pagination, navigateTo }: DataTab
 
   const reactTable = useReactTable({
     state: {
-      columnOrder,
+      columnOrder: fieldOrder,
     },
     data: tableData,
     columns,
@@ -211,14 +227,14 @@ function DataTable({ pivotObject, table, list, pagination, navigateTo }: DataTab
             </MenuCommand.Trigger>
             <MenuCommand.Content sideOffset={4} align="start" sameWidth>
               <MenuCommand.List>
-                {table.fields.map((field) => {
+                {fieldOrder.map((fieldName) => {
                   return (
                     <MenuCommand.Item
-                      key={field.name}
-                      onSelect={() => handleToggleColumn(field.name)}
+                      key={fieldName}
+                      onSelect={() => handleToggleColumn(fieldName)}
                     >
-                      {field.name}
-                      {columnList.includes(field.name) ? (
+                      {fieldName}
+                      {columnList.includes(fieldName) ? (
                         <Icon icon="tick" className="size-5" />
                       ) : null}
                     </MenuCommand.Item>

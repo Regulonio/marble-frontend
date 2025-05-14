@@ -11,6 +11,9 @@
   "premium": "Premium Feature",
   "upgrade": "Upgrade now",
   "auth.logout": "Log out",
+  "open": "Open",
+  "more_remains": "+{{count}} more",
+  "documents": "Documents",
   "search": "Search",
   "missing_configuration_title": "Missing Configuration",
   "missing_configuration": "Marble identified missing configuration for this feature. Please check the docs for the correct configuration setup.",
@@ -70,5 +73,12 @@
   "help_center.to_navigate": "to navigate",
   "help_center.to_switch_tabs": "to switch tabs",
   "help_center.no_results": "No results found",
-  "help_center.chat_with_us": "Chat with us"
+  "help_center.chat_with_us": "Chat with us",
+  "load_more_results": "Load more results",
+  "max_size_exceeded": "{{size}} MB is the maximum file size. Please try again with a smaller file.",
+  "snooze.tomorrow": "Tomorrow",
+  "snooze.oneWeek": "One week",
+  "snooze.oneMonth": "One month",
+  "snooze.nextMonday": "Next Monday",
+  "snooze.custom": "Custom"
 }
