@@ -27,10 +27,10 @@ export function UserInfo({ email, firstName, lastName, role, orgOrPartnerName }:
             <Logo
               logo="logo"
               aria-labelledby="marble logo"
-              className="size-6 shrink-0 transition-all group-aria-expanded/nav:size-12"
+              className="size-6 shrink-0 transition-all group-aria-expanded/nav:size-8"
             />
             <Logo
-              logo="marble"
+              logo="logo-text"
               aria-labelledby="marble"
               className="h-6 w-full opacity-0 transition-opacity group-aria-expanded/nav:opacity-100"
             />
