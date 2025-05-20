@@ -1,12 +1,12 @@
 name: Deploy to EC2
 
 on:
-  workflow_dispatch:  # This enables the manual trigger button
+  workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to'
+        description: "Environment to deploy to"
         required: true
-        default: 'production'
+        default: "production"
         type: choice
         options:
           - production
@@ -39,7 +39,6 @@ jobs:
 
       - name: Deploy to EC2
         run: |
-         
           # Save the Docker image to a tar file
           docker save marble-frontend:latest > marble-frontend.tar
           
