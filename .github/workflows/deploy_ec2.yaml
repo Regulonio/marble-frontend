@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Environment to deploy to"
+        description: 'Environment to deploy to'
         required: true
-        default: "production"
+        default: 'production'
         type: choice
         options:
           - production
@@ -63,4 +63,4 @@ jobs:
 
             # Clean up old images (older than 1 day)
             docker image prune -f --filter "until=24h"
-          EOF 
+          EOF
