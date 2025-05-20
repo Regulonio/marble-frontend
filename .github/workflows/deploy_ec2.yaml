@@ -1,0 +1,66 @@
+name: Deploy to EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: marble-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Deploy to EC2
+        run: |
+          # Save the Docker image to a tar file
+          docker save marble-frontend:latest > marble-frontend.tar
+
+          # Copy the Docker image to EC2
+          scp -o StrictHostKeyChecking=no marble-frontend.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/trans-monitoring/
+
+          # SSH into EC2 and run deployment commands
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/trans-monitoring
+
+            # Stop and remove existing containers
+            docker compose down
+
+            # Load the new Docker image
+            docker load < marble-frontend.tar
+
+            # Remove the tar file
+            rm marble-frontend.tar
+
+            # Start the containers
+            docker compose --env-file .env.example up -d
+
+            # Clean up old images (older than 1 day)
+            docker image prune -f --filter "until=24h"
+          EOF
