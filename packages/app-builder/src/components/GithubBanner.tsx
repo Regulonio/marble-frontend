@@ -15,18 +15,15 @@ export const GithubBanner = () => {
         <Icon icon="notifications" className="size-5" />
         <span>
           <span>{t('common:github_banner')} </span>
-          <a
-            href=""
+          <button
             className="underline"
-            target="_blank"
-            rel="noreferrer"
             onClick={() => {
               localStorage.setItem('show-github-banner', 'false');
               setVisibility('false');
             }}
           >
             Github
-          </a>
+          </button>
         </span>
       </div>
       <Icon

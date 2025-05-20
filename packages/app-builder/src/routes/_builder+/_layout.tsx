@@ -1,11 +1,10 @@
-import { navigationI18n, SidebarButton, SidebarLink } from '@app-builder/components';
-import { HelpCenter, useMarbleCoreResources } from '@app-builder/components/HelpCenter';
+import { navigationI18n, SidebarLink } from '@app-builder/components';
+// import { useMarbleCoreResources } from '@app-builder/components/HelpCenter';
 import {
   LeftSidebar,
   LeftSidebarSharpFactory,
   ToggleSidebar,
 } from '@app-builder/components/Layout/LeftSidebar';
-import { Nudge } from '@app-builder/components/Nudge';
 import { DatasetFreshnessBanner } from '@app-builder/components/Sanctions/DatasetFresshnessBanner';
 import { UserInfo } from '@app-builder/components/UserInfo';
 import { isMarbleCoreUser } from '@app-builder/models';
@@ -21,8 +20,7 @@ import { getRoute } from '@app-builder/utils/routes';
 import { type LoaderFunctionArgs } from '@remix-run/node';
 import { Outlet, useLoaderData } from '@remix-run/react';
 import { type Namespace } from 'i18next';
-import { useTranslation } from 'react-i18next';
-import { match } from 'ts-pattern';
+// import { useTranslation } from 'react-i18next';
 import { Icon } from 'ui-icons';
 
 import { getSettings } from './settings+/_layout';
@@ -69,17 +67,23 @@ export const handle = {
 };
 
 export default function Builder() {
-  const { user, orgUsers, organization, orgTags, featuresAccess, versions } =
-    useLoaderData<typeof loader>();
+  const {
+    user,
+    orgUsers,
+    organization,
+    orgTags,
+    featuresAccess,
+    //  versions
+  } = useLoaderData<typeof loader>();
   useSegmentIdentification(user);
-  const { t } = useTranslation(handle.i18n);
+  // const { t } = useTranslation(handle.i18n);
   const leftSidebarSharp = LeftSidebarSharpFactory.createSharp();
 
   // Refresh is done in the JSX because it needs to be done in the browser
   // This is only added here to prevent "auto sign-in" on /sign-in pages... (/logout do not trigger logout from Firebase)
   useRefreshToken();
 
-  const marbleCoreResources = useMarbleCoreResources();
+  // const marbleCoreResources = useMarbleCoreResources();
 
   return (
     <OrganizationDetailsContextProvider org={organization} currentUser={user}>
@@ -129,7 +133,7 @@ export default function Builder() {
                           Icon={(props) => <Icon icon="case-manager" {...props} />}
                         />
                       </li>
-                      <li>
+                      {/* <li>
                         {match(featuresAccess.analytics)
                           .with('allowed', () =>
                             featuresAccess.isAnalyticsAvailable ? (
@@ -178,7 +182,7 @@ export default function Builder() {
                             ) : null,
                           )
                           .exhaustive()}
-                      </li>
+                      </li> */}
                     </ul>
                   </nav>
                   <nav className="p-2 pb-4">
@@ -206,7 +210,7 @@ export default function Builder() {
                           />
                         </li>
                       ) : null}
-                      <li>
+                      {/* <li>
                         <HelpCenter
                           defaultTab={marbleCoreResources.defaultTab}
                           resources={marbleCoreResources.resources}
@@ -218,7 +222,7 @@ export default function Builder() {
                           }
                           versions={versions}
                         />
-                      </li>
+                      </li> */}
                       <li>
                         <ToggleSidebar />
                       </li>

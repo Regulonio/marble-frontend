@@ -5,6 +5,7 @@ export const logoNames = [
   'logo',
   'marble',
   'microsoft-logo',
+  'logo-text',
 ] as const;
 
 export type LogoName = (typeof logoNames)[number];
